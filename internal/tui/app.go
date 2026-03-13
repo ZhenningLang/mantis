@@ -23,7 +23,7 @@ const (
 
 type Model struct {
 	sessions    []session.Session
-	filtered    []int // indices into sessions
+	filtered    []int
 	cursor      int
 	search      textinput.Model
 	rename      textinput.Model
@@ -31,9 +31,10 @@ type Model struct {
 	height      int
 	mode        viewMode
 	deleteIdx   int
-	resumeID    string // set when user wants to resume
+	resumeID    string
 	quit        bool
 	errMsg      string
+	fullPath    bool // toggle project name display
 }
 
 func New(sessions []session.Session) *Model {
@@ -161,6 +162,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+q":
 		m.quit = true
 		return m, tea.Quit
+	case "tab":
+		m.fullPath = !m.fullPath
 	default:
 		var cmd tea.Cmd
 		old := m.search.Value()
@@ -331,7 +334,7 @@ func (m *Model) View() string {
 		}
 		s := &m.sessions[m.filtered[idx]]
 		isSelected := idx == m.cursor
-		b.WriteString(renderListItem(s, m.width, isSelected, s.Selected))
+		b.WriteString(renderListItem(s, m.width, isSelected, s.Selected, m.fullPath))
 		b.WriteString("\n")
 	}
 
@@ -372,7 +375,7 @@ func (m *Model) View() string {
 		if m.errMsg != "" {
 			b.WriteString(dimStyle.Render(m.errMsg) + "  ")
 		}
-		help := helpStyle.Render("↑↓:nav  Enter:resume  ^D:del  ^X:batch  ^R:rename  ^S:stats  Esc:quit")
+		help := helpStyle.Render("↑↓:nav  Enter:resume  Tab:path  ^D:del  ^X:batch  ^R:rename  ^S:stats  Esc:quit")
 		b.WriteString(help)
 	}
 

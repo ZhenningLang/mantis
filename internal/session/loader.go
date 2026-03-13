@@ -27,12 +27,13 @@ func LoadAll() ([]Session, error) {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			project := dirToProject(entry.Name())
+			projectFull := dirToPath(entry.Name())
 			dirPath := filepath.Join(root, entry.Name())
-			ss, _ := loadFromDir(dirPath, project)
+			ss, _ := loadFromDir(dirPath, project, projectFull)
 			sessions = append(sessions, ss...)
 		} else if strings.HasSuffix(entry.Name(), ".jsonl") {
 			id := strings.TrimSuffix(entry.Name(), ".jsonl")
-			s, err := loadSession(root, id, "")
+			s, err := loadSession(root, id, "", "")
 			if err == nil {
 				sessions = append(sessions, s)
 			}
@@ -46,7 +47,7 @@ func LoadAll() ([]Session, error) {
 	return sessions, nil
 }
 
-func loadFromDir(dir, project string) ([]Session, error) {
+func loadFromDir(dir, project, projectFull string) ([]Session, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -56,7 +57,7 @@ func loadFromDir(dir, project string) ([]Session, error) {
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".jsonl") {
 			id := strings.TrimSuffix(e.Name(), ".jsonl")
-			s, err := loadSession(dir, id, project)
+			s, err := loadSession(dir, id, project, projectFull)
 			if err == nil {
 				sessions = append(sessions, s)
 			}
@@ -65,7 +66,7 @@ func loadFromDir(dir, project string) ([]Session, error) {
 	return sessions, nil
 }
 
-func loadSession(dir, id, project string) (Session, error) {
+func loadSession(dir, id, project, projectFull string) (Session, error) {
 	jsonlPath := filepath.Join(dir, id+".jsonl")
 	settingsPath := filepath.Join(dir, id+".settings.json")
 
@@ -75,9 +76,10 @@ func loadSession(dir, id, project string) (Session, error) {
 	}
 
 	s := Session{
-		Project:  project,
-		ModTime:  info.ModTime(),
-		FilePath: jsonlPath,
+		Project:     project,
+		ProjectFull: projectFull,
+		ModTime:     info.ModTime(),
+		FilePath:    jsonlPath,
 	}
 
 	// parse metadata from first line
@@ -149,11 +151,18 @@ func dirToProject(dirName string) string {
 	if len(parts) == 0 {
 		return dirName
 	}
-	// find last non-empty part
 	for i := len(parts) - 1; i >= 0; i-- {
 		if parts[i] != "" {
 			return parts[i]
 		}
 	}
 	return dirName
+}
+
+func dirToPath(dirName string) string {
+	// -Users-zhenninglang-Projects-ordo_ai -> /Users/zhenninglang/Projects/ordo_ai
+	if dirName == "" {
+		return ""
+	}
+	return "/" + strings.TrimLeft(strings.ReplaceAll(dirName, "-", "/"), "/")
 }

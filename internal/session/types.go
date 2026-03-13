@@ -29,13 +29,14 @@ type Message struct {
 }
 
 type Session struct {
-	Meta       SessionMeta
-	Settings   Settings
-	Project    string
-	ModTime    time.Time
-	FilePath   string
-	Messages   []Message
-	Selected   bool // for batch operations
+	Meta        SessionMeta
+	Settings    Settings
+	Project     string // short name (last segment)
+	ProjectFull string // full directory path
+	ModTime     time.Time
+	FilePath    string
+	Messages    []Message
+	Selected    bool
 }
 
 func (s *Session) ProjectShort() string {
@@ -43,6 +44,18 @@ func (s *Session) ProjectShort() string {
 		return "global"
 	}
 	return s.Project
+}
+
+func (s *Session) ProjectDisplay(full bool) string {
+	if full {
+		if s.ProjectFull != "" {
+			return s.ProjectFull
+		}
+		if s.Meta.WorkingDirectory != "" {
+			return s.Meta.WorkingDirectory
+		}
+	}
+	return s.ProjectShort()
 }
 
 func (s *Session) TotalTokens() int {

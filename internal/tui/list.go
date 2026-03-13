@@ -46,8 +46,8 @@ func extractFirstUserMsg(s session.Session) string {
 	return ""
 }
 
-func renderListItem(s *session.Session, width int, selected, marked bool) string {
-	proj := projectStyle.Render(fmt.Sprintf("[%s]", s.ProjectShort()))
+func renderListItem(s *session.Session, width int, selected, marked, fullPath bool) string {
+	proj := projectStyle.Render(fmt.Sprintf("[%s]", s.ProjectDisplay(fullPath)))
 	title := s.Meta.Title
 	if len(title) > 40 {
 		title = title[:37] + "..."
