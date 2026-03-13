@@ -100,6 +100,12 @@ func loadSession(dir, id, project, projectFull string) (Session, error) {
 		json.Unmarshal(data, &s.Settings)
 	}
 
+	// prefer cwd from metadata as source of truth
+	if s.Meta.WorkingDirectory != "" {
+		s.ProjectFull = s.Meta.WorkingDirectory
+		s.Project = filepath.Base(s.Meta.WorkingDirectory)
+	}
+
 	return s, nil
 }
 
@@ -146,23 +152,65 @@ func parseJSONL(path string) (SessionMeta, []Message, error) {
 }
 
 func dirToProject(dirName string) string {
-	// -Users-zhenninglang-Projects-ordo_ai -> ordo_ai
-	parts := strings.Split(dirName, "-")
-	if len(parts) == 0 {
-		return dirName
-	}
-	for i := len(parts) - 1; i >= 0; i-- {
-		if parts[i] != "" {
-			return parts[i]
+	p := dirToPath(dirName)
+	if p != "" {
+		if base := filepath.Base(p); base != "." && base != "/" {
+			return base
 		}
 	}
 	return dirName
 }
 
 func dirToPath(dirName string) string {
-	// -Users-zhenninglang-Projects-ordo_ai -> /Users/zhenninglang/Projects/ordo_ai
 	if dirName == "" {
 		return ""
 	}
+
+	parts := strings.Split(dirName, "-")
+	var segments []string
+	for _, p := range parts {
+		if p != "" {
+			segments = append(segments, p)
+		}
+	}
+	if len(segments) == 0 {
+		return ""
+	}
+
+	// probe filesystem to resolve ambiguous `-` separators
+	if resolved := probePath(segments); resolved != "" {
+		return resolved
+	}
+
+	// fallback: naive replacement (path may not exist on this machine)
 	return "/" + strings.TrimLeft(strings.ReplaceAll(dirName, "-", "/"), "/")
+}
+
+// probePath tries to reconstruct a real filesystem path from segments
+// that were split by `-`. At each level, it tries the single segment first;
+// if no directory matches, it greedily combines with subsequent segments.
+func probePath(segments []string) string {
+	current := "/"
+	for i := 0; i < len(segments); {
+		found := false
+		candidate := ""
+		for j := i; j < len(segments); j++ {
+			if j == i {
+				candidate = segments[j]
+			} else {
+				candidate += "-" + segments[j]
+			}
+			test := filepath.Join(current, candidate)
+			if info, err := os.Stat(test); err == nil && info.IsDir() {
+				current = test
+				i = j + 1
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ""
+		}
+	}
+	return current
 }
