@@ -56,8 +56,15 @@ func renderListItem(s *session.Session, width int, selected, marked bool) string
 	model := modelShort(s.Settings.Model)
 	ago := timeAgo(s.ModTime)
 
+	// short session id (first 8 chars)
+	sid := s.Meta.ID
+	if len(sid) > 8 {
+		sid = sid[:8]
+	}
+	sid = dimStyle.Render(sid)
+
 	// build the line
-	left := fmt.Sprintf("  %s %s", proj, title)
+	left := fmt.Sprintf("  %s %s %s", proj, sid, title)
 	right := fmt.Sprintf("%s  %s", ago, model)
 
 	// pad between left and right
