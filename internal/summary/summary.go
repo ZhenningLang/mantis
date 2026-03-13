@@ -22,7 +22,7 @@ type Summary struct {
 	Model       string    `json:"model"`
 }
 
-func summariesDir() string {
+func Dir() string {
 	return filepath.Join(config.Dir(), "summaries")
 }
 
@@ -33,7 +33,7 @@ func SummaryPath(sessionFilePath string) string {
 	projectDir := filepath.Base(dir)
 
 	id := strings.TrimSuffix(filepath.Base(sessionFilePath), ".jsonl")
-	return filepath.Join(summariesDir(), projectDir, id+".summary.json")
+	return filepath.Join(Dir(), projectDir, id+".summary.json")
 }
 
 func LoadSummary(sessionFilePath string) *Summary {

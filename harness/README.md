@@ -44,6 +44,7 @@ mantis 是一个终端 TUI 应用，用于浏览、搜索和管理 [Droid](https
 ```bash
 mantis              # 启动 TUI
 mantis config       # 配置 LLM（交互式）
+mantis status       # 查看摘要索引状态和统计信息
 mantis version      # 打印版本
 ```
 

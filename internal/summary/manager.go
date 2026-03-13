@@ -2,10 +2,16 @@ package summary
 
 import (
 	"context"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/zhenninglang/mantis/internal/config"
 	"github.com/zhenninglang/mantis/internal/session"
 )
+
+const numWorkers = 5
 
 type Progress struct {
 	Done    int
@@ -16,10 +22,9 @@ type Progress struct {
 	Err     error
 }
 
-// GenerateMissing processes sessions that lack summaries.
-// It sends progress updates on the returned channel and closes it when done.
-func GenerateMissing(ctx context.Context, cfg config.LLMConfig, sessions []session.Session) <-chan Progress {
-	ch := make(chan Progress, 1)
+// GenerateMissing processes sessions that lack summaries using parallel workers.
+func GenerateMissing(ctx context.Context, cfg config.LLMConfig, sessions []session.Session) (<-chan Progress, int) {
+	ch := make(chan Progress, numWorkers)
 
 	var pending []int
 	for i := range sessions {
@@ -31,48 +36,94 @@ func GenerateMissing(ctx context.Context, cfg config.LLMConfig, sessions []sessi
 	total := len(pending)
 	if total == 0 {
 		close(ch)
-		return ch
+		return ch, 0
 	}
+
+	var done atomic.Int32
+	jobs := make(chan int, numWorkers)
 
 	go func() {
 		defer close(ch)
-		for done, idx := range pending {
-			if ctx.Err() != nil {
-				return
-			}
 
-			s := &sessions[idx]
-			msgs := extractUserMessages(s)
+		var wg sync.WaitGroup
+		for range numWorkers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for idx := range jobs {
+					if ctx.Err() != nil {
+						return
+					}
+					s := &sessions[idx]
+					msgs := extractUserMessages(s)
+					d := int(done.Add(1))
 
-			p := Progress{
-				Done:    done,
-				Total:   total,
-				Current: s.Meta.Title,
-				Index:   idx,
-			}
+					p := Progress{
+						Done:    d,
+						Total:   total,
+						Current: s.Meta.Title,
+						Index:   idx,
+					}
 
-			if len(msgs) == 0 {
-				p.Done = done + 1
-				ch <- p
-				continue
-			}
+					if len(msgs) == 0 {
+						empty := &Summary{GeneratedAt: time.Now(), Model: cfg.Model}
+						SaveSummary(s.FilePath, empty)
+						p.Summary = empty
+						ch <- p
+						continue
+					}
 
-			sum, err := Generate(ctx, cfg, msgs)
-			if err != nil {
-				p.Err = err
-				p.Done = done + 1
-				ch <- p
-				continue
-			}
+					sum, err := Generate(ctx, cfg, msgs)
+					if err != nil {
+						p.Err = err
+						ch <- p
+						continue
+					}
 
-			SaveSummary(s.FilePath, sum)
-			p.Summary = sum
-			p.Done = done + 1
-			ch <- p
+					SaveSummary(s.FilePath, sum)
+					p.Summary = sum
+					ch <- p
+				}
+			}()
 		}
+
+		for _, idx := range pending {
+			if ctx.Err() != nil {
+				break
+			}
+			jobs <- idx
+		}
+		close(jobs)
+		wg.Wait()
 	}()
 
-	return ch
+	return ch, total
+}
+
+// noisePatterns are substrings that indicate non-meaningful user messages.
+var noisePatterns = []string{
+	"cancel",
+	"cancelled",
+	"canceled",
+	"已取消",
+	"已中断",
+	"Request interrupted",
+	"# Task Tool Invocation",
+	"<system-reminder>",
+}
+
+func isNoise(text string) bool {
+	t := strings.TrimSpace(text)
+	if len(t) < 5 {
+		return true
+	}
+	lower := strings.ToLower(t)
+	for _, p := range noisePatterns {
+		if strings.Contains(lower, strings.ToLower(p)) {
+			return true
+		}
+	}
+	return false
 }
 
 // extractUserMessages selects user messages strategically:
@@ -82,7 +133,7 @@ func extractUserMessages(s *session.Session) []string {
 	for _, msg := range s.Messages {
 		if msg.Role == "user" {
 			text := extractMsgText(msg.Content)
-			if text != "" {
+			if text != "" && !isNoise(text) {
 				all = append(all, text)
 			}
 		}
@@ -93,13 +144,11 @@ func extractUserMessages(s *session.Session) []string {
 		return all
 	}
 
-	// first 3 + last 3
 	selected := make([]string, 0, 10)
 	selected = append(selected, all[:3]...)
 
-	// sample 4 from middle
 	middle := all[3 : n-3]
-	step := len(middle) / 5 // 4 samples, 5 gaps
+	step := len(middle) / 5
 	if step < 1 {
 		step = 1
 	}

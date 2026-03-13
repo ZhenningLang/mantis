@@ -16,6 +16,8 @@ internal/
     manager.go                — 批量生成 + 进度管理
   action/
     action.go                 — 操作逻辑（Delete, Rename）
+  status/
+    status.go                 — CLI status 命令（摘要状态 + 统计信息）
   tui/
     app.go                    — 主 Model + Init/Update/View（Bubble Tea 框架）
     list.go                   — 列表渲染 + 模糊搜索

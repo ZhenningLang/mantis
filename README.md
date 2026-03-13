@@ -25,6 +25,7 @@ go build -o mantis .
 ```bash
 mantis              # Launch TUI
 mantis config       # Configure LLM for smart search
+mantis status       # Show indexing status and statistics
 mantis version      # Print version
 ```
 

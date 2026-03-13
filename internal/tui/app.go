@@ -123,7 +123,9 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) startIndexing() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.indexCancel = cancel
-	m.indexCh = summary.GenerateMissing(ctx, m.cfg.LLM, m.sessions)
+	ch, total := summary.GenerateMissing(ctx, m.cfg.LLM, m.sessions)
+	m.indexCh = ch
+	m.indexTotal = total
 	return m.waitForNextSummary()
 }
 
@@ -473,7 +475,8 @@ func (m *Model) View() string {
 		header += " " + projectStyle.Render("["+m.projectFilter+"]")
 	}
 	if m.indexTotal > 0 && m.indexDone < m.indexTotal {
-		header += " " + dimStyle.Render(fmt.Sprintf("Indexing: %d/%d", m.indexDone, m.indexTotal))
+		indexed := len(m.summaries)
+		header += " " + dimStyle.Render(fmt.Sprintf("Indexed: %d/%d", indexed, len(m.sessions)))
 	}
 	b.WriteString(header)
 	b.WriteString("\n")
@@ -504,7 +507,7 @@ func (m *Model) View() string {
 		}
 		s := &m.sessions[m.filtered[idx]]
 		isSelected := idx == m.cursor
-		b.WriteString(renderListItem(s, m.width, isSelected, s.Selected, m.fullPath))
+		b.WriteString(renderListItem(s, m.summaries[m.filtered[idx]], m.width, isSelected, s.Selected, m.fullPath))
 		b.WriteString("\n")
 	}
 
@@ -514,7 +517,11 @@ func (m *Model) View() string {
 
 	// preview
 	if previewHeight > 0 {
-		preview := renderPreview(m.selectedSession(), m.width)
+		var selSum *summary.Summary
+		if sel := m.selectedSession(); sel != nil {
+			selSum = m.summaries[m.filtered[m.cursor]]
+		}
+		preview := renderPreview(m.selectedSession(), selSum, m.width)
 		lines := strings.Split(preview, "\n")
 		for i := 0; i < previewHeight && i < len(lines); i++ {
 			b.WriteString(lines[i])

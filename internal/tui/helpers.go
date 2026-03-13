@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
 func extractText(content any) string {
@@ -69,4 +71,26 @@ func formatTokens(n int) string {
 		return fmt.Sprintf("%.1fK", float64(n)/1000)
 	}
 	return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+}
+
+// truncateDisplay truncates s to fit within maxWidth display columns.
+func truncateDisplay(s string, maxWidth int) string {
+	w := runewidth.StringWidth(s)
+	if w <= maxWidth {
+		return s
+	}
+	ellipsis := "..."
+	target := maxWidth - runewidth.StringWidth(ellipsis)
+	if target <= 0 {
+		return ellipsis[:maxWidth]
+	}
+	cur := 0
+	for i, r := range s {
+		rw := runewidth.RuneWidth(r)
+		if cur+rw > target {
+			return s[:i] + ellipsis
+		}
+		cur += rw
+	}
+	return s
 }

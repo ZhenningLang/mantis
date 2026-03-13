@@ -45,10 +45,12 @@ Output ONLY valid JSON in this exact format:
 }
 
 Rules:
-- title: concise, descriptive, under 60 characters
+- title: concise, descriptive, under 60 characters. Focus on WHAT was done, not meta-commentary
 - topics: 1-5 topics covering distinct themes in the session
 - keywords: 2-6 lowercase keywords per topic, include technologies, actions, concepts
 - Use the same language as the user messages (Chinese if messages are in Chinese)
+- Even if messages are short or seem trivial, summarize what the user actually asked or discussed
+- Never generate meta-commentary like "会话已取消" or "无技术讨论". Always describe the actual content
 - Output ONLY the JSON, no markdown fences, no explanation`
 
 func Generate(ctx context.Context, cfg config.LLMConfig, userMessages []string) (*Summary, error) {
@@ -84,7 +86,7 @@ func Generate(ctx context.Context, cfg config.LLMConfig, userMessages []string) 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("llm request: %w", err)
@@ -119,6 +121,9 @@ func Generate(ctx context.Context, cfg config.LLMConfig, userMessages []string) 
 	var s Summary
 	if err := json.Unmarshal([]byte(content), &s); err != nil {
 		return nil, fmt.Errorf("parse summary json: %w (content: %s)", err, truncate(content, 200))
+	}
+	if s.Title == "" {
+		return nil, fmt.Errorf("empty title in response (content: %s)", truncate(content, 200))
 	}
 
 	s.GeneratedAt = time.Now()

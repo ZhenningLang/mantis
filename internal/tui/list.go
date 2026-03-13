@@ -80,12 +80,15 @@ func extractUserMsgSample(s session.Session) string {
 	return strings.Join(selected, " ")
 }
 
-func renderListItem(s *session.Session, width int, selected, marked, fullPath bool) string {
+func renderListItem(s *session.Session, sum *summary.Summary, width int, selected, marked, fullPath bool) string {
 	proj := projectStyle.Render(fmt.Sprintf("[%s]", s.ProjectDisplay(fullPath)))
 	title := s.Meta.Title
-	if len(title) > 40 {
-		title = title[:37] + "..."
+	if sum != nil && sum.Title != "" {
+		title = "[AI] " + sum.Title
+	} else if sum != nil && sum.Title == "" {
+		title = truncateDisplay(title, 36) + " " + dimStyle.Render("(empty)")
 	}
+	title = truncateDisplay(title, 50)
 
 	model := modelShort(s.Settings.Model)
 	ago := timeAgo(s.ModTime)
