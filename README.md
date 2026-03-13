@@ -23,7 +23,9 @@ go build -o mantis .
 ## Usage
 
 ```bash
-mantis
+mantis              # Launch TUI
+mantis config       # Configure LLM for smart search
+mantis version      # Print version
 ```
 
 ## Keybindings
@@ -34,15 +36,37 @@ mantis
 | `↑` / `↓` | Navigate |
 | `Enter` | Resume session (`droid -r`) |
 | `Tab` | Toggle project short name / full path |
+| `Ctrl+P` | Filter by project |
 | `Ctrl+D` | Delete session |
 | `Ctrl+X` | Batch delete (Tab to mark, d to confirm) |
 | `Ctrl+R` | Rename session |
 | `Ctrl+S` | Statistics panel |
-| `Esc` | Clear search / Quit |
+| `Esc` | Clear search / Clear project filter / Quit |
+
+## Smart Search
+
+By default, mantis searches across session titles, project names, and user messages using fuzzy matching.
+
+For better search results, configure an LLM to auto-generate summaries and keywords for each session:
+
+```bash
+mantis config
+```
+
+This will prompt you for:
+- **Base URL** — OpenAI-compatible API endpoint (default: `https://api.openai.com/v1`)
+- **API Key** — Your API key
+- **Model** — Model name (default: `gpt-4o-mini`)
+
+Any OpenAI-compatible provider works (OpenAI, Deepseek, Ollama, etc.).
+
+Once configured, mantis will automatically generate summaries for new sessions in the background on startup. The indexing progress is shown in the header (`Indexing: 42/128`). Summaries are cached in `~/.mantis/summaries/` so they only need to be generated once per session.
 
 ## Data
 
-Reads from `~/.factory/sessions/`. Each session is a `.jsonl` (conversation) + `.settings.json` (metadata) pair.
+- Sessions: `~/.factory/sessions/` — `.jsonl` (conversation) + `.settings.json` (metadata)
+- Config: `~/.mantis/config.yaml`
+- Summaries: `~/.mantis/summaries/`
 
 ## License
 

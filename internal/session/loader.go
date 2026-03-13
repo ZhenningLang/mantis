@@ -122,8 +122,6 @@ func parseJSONL(path string) (SessionMeta, []Message, error) {
 	var meta SessionMeta
 	var messages []Message
 	lineNum := 0
-	msgCount := 0
-	maxMessages := 20
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -133,17 +131,14 @@ func parseJSONL(path string) (SessionMeta, []Message, error) {
 
 		if lineNum == 0 {
 			json.Unmarshal(line, &meta)
-		} else if msgCount < maxMessages {
+		} else {
 			var wrapper struct {
 				Type    string  `json:"type"`
 				Message Message `json:"message"`
 			}
 			if json.Unmarshal(line, &wrapper) == nil && wrapper.Type == "message" && wrapper.Message.Role != "" {
 				messages = append(messages, wrapper.Message)
-				msgCount++
 			}
-		} else {
-			break
 		}
 		lineNum++
 	}

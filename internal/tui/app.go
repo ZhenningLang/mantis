@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,7 +10,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/zhenninglang/mantis/internal/action"
+	"github.com/zhenninglang/mantis/internal/config"
 	"github.com/zhenninglang/mantis/internal/session"
+	"github.com/zhenninglang/mantis/internal/summary"
 )
 
 type viewMode int
@@ -42,9 +45,24 @@ type Model struct {
 	projects      []string
 	projectCursor int
 	projectQuery  string
+	cfg           config.Config
+	summaries     map[int]*summary.Summary // session index -> summary
+	indexDone     int
+	indexTotal    int
+	indexCancel   context.CancelFunc
+	indexCh       <-chan summary.Progress
 }
 
-func New(sessions []session.Session, version string) *Model {
+type summaryUpdatedMsg struct {
+	index   int
+	summary *summary.Summary
+	done    int
+	total   int
+}
+
+type summaryDoneMsg struct{}
+
+func New(sessions []session.Session, version string, cfg config.Config) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "Search sessions..."
 	ti.Focus()
@@ -59,13 +77,23 @@ func New(sessions []session.Session, version string) *Model {
 		indices[i] = i
 	}
 
+	// preload existing summaries
+	sums := make(map[int]*summary.Summary, len(sessions))
+	for i := range sessions {
+		if s := summary.LoadSummary(sessions[i].FilePath); s != nil {
+			sums[i] = s
+		}
+	}
+
 	return &Model{
-		sessions: sessions,
-		filtered: indices,
-		search:   ti,
-		rename:   ri,
-		version:  version,
-		projects: collectProjects(sessions),
+		sessions:  sessions,
+		filtered:  indices,
+		search:    ti,
+		rename:    ri,
+		version:   version,
+		projects:  collectProjects(sessions),
+		cfg:       cfg,
+		summaries: sums,
 	}
 }
 
@@ -85,7 +113,34 @@ func collectProjects(sessions []session.Session) []string {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return textinput.Blink
+	cmds := []tea.Cmd{textinput.Blink}
+	if m.cfg.HasLLM() {
+		cmds = append(cmds, m.startIndexing())
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) startIndexing() tea.Cmd {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.indexCancel = cancel
+	m.indexCh = summary.GenerateMissing(ctx, m.cfg.LLM, m.sessions)
+	return m.waitForNextSummary()
+}
+
+func (m *Model) waitForNextSummary() tea.Cmd {
+	ch := m.indexCh
+	return func() tea.Msg {
+		p, ok := <-ch
+		if !ok {
+			return summaryDoneMsg{}
+		}
+		return summaryUpdatedMsg{
+			index:   p.Index,
+			summary: p.Summary,
+			done:    p.Done,
+			total:   p.Total,
+		}
+	}
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -97,6 +152,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+
+	case summaryUpdatedMsg:
+		m.indexDone = msg.done
+		m.indexTotal = msg.total
+		if msg.summary != nil {
+			m.summaries[msg.index] = msg.summary
+		}
+		m.refilter()
+		return m, m.waitForNextSummary()
+
+	case summaryDoneMsg:
+		m.indexDone = m.indexTotal
+		return m, nil
 	}
 
 	// pass to active text input
@@ -120,6 +188,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// global keys
 	if key == "ctrl+c" {
 		m.quit = true
+		m.cancelIndexing()
 		return m, tea.Quit
 	}
 
@@ -368,7 +437,7 @@ func (m *Model) handleBatchSelect(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) refilter() {
-	m.filtered = filterSessions(m.sessions, m.search.Value(), m.projectFilter)
+	m.filtered = filterSessions(m.sessions, m.search.Value(), m.projectFilter, m.summaries)
 	if m.cursor >= len(m.filtered) {
 		m.cursor = max(0, len(m.filtered)-1)
 	}
@@ -402,6 +471,9 @@ func (m *Model) View() string {
 		dimStyle.Render(fmt.Sprintf("  [%d/%d]", len(m.filtered), len(m.sessions)))
 	if m.projectFilter != "" {
 		header += " " + projectStyle.Render("["+m.projectFilter+"]")
+	}
+	if m.indexTotal > 0 && m.indexDone < m.indexTotal {
+		header += " " + dimStyle.Render(fmt.Sprintf("Indexing: %d/%d", m.indexDone, m.indexTotal))
 	}
 	b.WriteString(header)
 	b.WriteString("\n")
@@ -470,7 +542,9 @@ func (m *Model) View() string {
 		b.WriteString(markedStyle.Render(fmt.Sprintf("BATCH SELECT (%d marked)", selected)) +
 			helpStyle.Render("  Tab:mark  d:delete marked  Esc:cancel"))
 	default:
-		if m.errMsg != "" {
+		if !m.cfg.HasLLM() {
+			b.WriteString(dimStyle.Render("Run `mantis config` for smart search.") + "  ")
+		} else if m.errMsg != "" {
 			b.WriteString(dimStyle.Render(m.errMsg) + "  ")
 		}
 		help := helpStyle.Render("↑↓:nav  Enter:resume  Tab:path  ^P:project  ^D:del  ^X:batch  ^R:rename  ^S:stats  Esc:quit")
@@ -478,6 +552,12 @@ func (m *Model) View() string {
 	}
 
 	return lipgloss.NewStyle().MaxWidth(m.width).MaxHeight(m.height).Render(b.String())
+}
+
+func (m *Model) cancelIndexing() {
+	if m.indexCancel != nil {
+		m.indexCancel()
+	}
 }
 
 // ResumeID returns the session ID to resume after quitting, or empty string.

@@ -3,11 +3,17 @@
 ## 项目结构
 
 ```
-main.go                       — 入口：加载 session → 启动 TUI → 退出后 exec droid -r
+main.go                       — 入口：CLI 分发 + 加载 session → 启动 TUI → 退出后 exec droid -r
 internal/
+  config/
+    config.go                 — 配置加载/保存/交互式引导（~/.mantis/config.yaml）
   session/
     types.go                  — 数据模型（Session, SessionMeta, Settings, TokenUsage, Message）
     loader.go                 — 从 ~/.factory/sessions/ 加载所有 session
+  summary/
+    summary.go                — 摘要数据类型 + 读写（~/.mantis/summaries/）
+    llm.go                    — OpenAI-compatible API 调用
+    manager.go                — 批量生成 + 进度管理
   action/
     action.go                 — 操作逻辑（Delete, Rename）
   tui/

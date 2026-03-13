@@ -7,9 +7,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
 	"github.com/zhenninglang/mantis/internal/session"
+	"github.com/zhenninglang/mantis/internal/summary"
 )
 
-func filterSessions(sessions []session.Session, query, projectFilter string) []int {
+func filterSessions(sessions []session.Session, query, projectFilter string, summaries map[int]*summary.Summary) []int {
 	// step 1: project filter
 	var candidates []int
 	if projectFilter == "" {
@@ -33,7 +34,11 @@ func filterSessions(sessions []session.Session, query, projectFilter string) []i
 	source := make(sessionSource, len(candidates))
 	for i, idx := range candidates {
 		s := sessions[idx]
-		source[i] = fmt.Sprintf("%s %s %s", s.Meta.Title, s.ProjectShort(), extractFirstUserMsg(s))
+		if sum, ok := summaries[idx]; ok && sum != nil {
+			source[i] = fmt.Sprintf("%s %s %s", sum.SearchText(), s.ProjectShort(), s.Meta.Title)
+		} else {
+			source[i] = fmt.Sprintf("%s %s %s", s.Meta.Title, s.ProjectShort(), extractUserMsgSample(s))
+		}
 	}
 
 	matches := fuzzy.FindFrom(query, source)
@@ -49,13 +54,30 @@ type sessionSource []string
 func (s sessionSource) String(i int) string { return s[i] }
 func (s sessionSource) Len() int            { return len(s) }
 
-func extractFirstUserMsg(s session.Session) string {
+// extractUserMsgSample returns text from strategically selected user messages.
+func extractUserMsgSample(s session.Session) string {
+	var all []string
 	for _, msg := range s.Messages {
 		if msg.Role == "user" {
-			return extractText(msg.Content)
+			if t := extractText(msg.Content); t != "" {
+				all = append(all, t)
+			}
 		}
 	}
-	return ""
+
+	n := len(all)
+	if n == 0 {
+		return ""
+	}
+	if n <= 6 {
+		return strings.Join(all, " ")
+	}
+
+	// first 3 + last 3
+	var selected []string
+	selected = append(selected, all[:3]...)
+	selected = append(selected, all[n-3:]...)
+	return strings.Join(selected, " ")
 }
 
 func renderListItem(s *session.Session, width int, selected, marked, fullPath bool) string {
