@@ -171,6 +171,9 @@ func extractMsgText(content any) string {
 			if m, ok := item.(map[string]any); ok {
 				if m["type"] == "text" {
 					if t, ok := m["text"].(string); ok {
+						if strings.HasPrefix(strings.TrimSpace(t), "<") {
+							continue
+						}
 						return t
 					}
 				}

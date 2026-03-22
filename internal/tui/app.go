@@ -497,26 +497,42 @@ func (m *Model) View() string {
 	var b strings.Builder
 
 	// header
-	header := titleStyle.Render("mantis") + dimStyle.Render(" v"+m.version) + " " + m.search.View() +
-		dimStyle.Render(fmt.Sprintf("  [%d/%d]", len(m.filtered), len(m.sessions)))
+	header := titleStyle.Render("mantis") + dimStyle.Render(" v"+m.version) + " " + m.search.View()
 	if m.projectFilter != "" {
 		header += " " + projectStyle.Render("["+m.projectFilter+"]")
 	}
-	if m.indexTotal > 0 && m.indexDone < m.indexTotal {
-		indexed := len(m.summaries)
-		header += " " + dimStyle.Render(fmt.Sprintf("Indexed: %d/%d", indexed, len(m.sessions)))
-	}
 	b.WriteString(header)
 	b.WriteString("\n")
+
+	// index status line
+	indexed := len(m.summaries)
+	total := len(m.sessions)
+	filtered := len(m.filtered)
+	skipped := 0
+	for _, s := range m.summaries {
+		if s != nil && s.Title == "" {
+			skipped++
+		}
+	}
+	summarized := indexed - skipped
+	waiting := total - indexed
+	statusLine := dimStyle.Render(fmt.Sprintf("%d total, %d shown, %d indexed, %d skipped, %d waiting",
+		total, filtered, summarized, skipped, waiting))
+	if m.indexTotal > 0 && m.indexDone < m.indexTotal {
+		statusLine += dimStyle.Render(fmt.Sprintf("  (indexing %d/%d...)", m.indexDone, m.indexTotal))
+	}
+	b.WriteString(statusLine)
+	b.WriteString("\n")
+
 	b.WriteString(dimStyle.Render(strings.Repeat("─", m.width)))
 	b.WriteString("\n")
 
-	// calculate layout
-	listHeight := (m.height - 6) * 2 / 3
+	// calculate layout (header=2 lines + separator + status bar + separator + bottom = 7 overhead)
+	listHeight := (m.height - 7) * 2 / 3
 	if listHeight < 3 {
 		listHeight = 3
 	}
-	previewHeight := m.height - listHeight - 6
+	previewHeight := m.height - listHeight - 7
 
 	// list
 	start := 0
