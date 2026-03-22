@@ -16,14 +16,16 @@ func renderPreview(s *session.Session, sum *summary.Summary, width, height int) 
 	var b strings.Builder
 	used := 0
 
-	// line 1: title (prefer AI title)
-	title := s.Meta.Title
-	if sum != nil && sum.Title != "" {
-		title = "[AI] " + sum.Title
-	}
-	b.WriteString(previewTitleStyle.Render(truncateDisplay(title, width-2)))
+	// title
+	b.WriteString(previewTitleStyle.Render(truncateDisplay(s.Meta.Title, width-2)))
 	b.WriteString("\n")
 	used++
+
+	if sum != nil && sum.Title != "" {
+		b.WriteString(dimStyle.Render("[AI] ") + previewValueStyle.Render(truncateDisplay(sum.Title, width-8)))
+		b.WriteString("\n")
+		used++
+	}
 
 	// line 2-3: metadata
 	info := fmt.Sprintf("%s  |  %s  |  %s",
