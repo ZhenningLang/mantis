@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -62,7 +63,7 @@ type summaryUpdatedMsg struct {
 
 type summaryDoneMsg struct{}
 
-func New(sessions []session.Session, version string, cfg config.Config) *Model {
+func New(sessions []session.Session, version string, cfg config.Config, cwd string) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "Search sessions..."
 	ti.Focus()
@@ -85,16 +86,43 @@ func New(sessions []session.Session, version string, cfg config.Config) *Model {
 		}
 	}
 
-	return &Model{
-		sessions:  sessions,
-		filtered:  indices,
-		search:    ti,
-		rename:    ri,
-		version:   version,
-		projects:  collectProjects(sessions),
-		cfg:       cfg,
-		summaries: sums,
+	// auto-filter to current directory's project
+	var initFilter string
+	if cwd != "" {
+		cwd = filepath.Clean(cwd)
+		bestLen := 0
+		for i := range sessions {
+			sp := filepath.Clean(sessions[i].ProjectFull)
+			if sp == "" {
+				continue
+			}
+			if sp == cwd {
+				initFilter = sessions[i].ProjectShort()
+				break
+			}
+			// cwd is under this project — pick the longest (most specific) match
+			if strings.HasPrefix(cwd, sp+"/") && len(sp) > bestLen {
+				bestLen = len(sp)
+				initFilter = sessions[i].ProjectShort()
+			}
+		}
 	}
+
+	m := &Model{
+		sessions:      sessions,
+		filtered:      indices,
+		search:        ti,
+		rename:        ri,
+		version:       version,
+		projects:      collectProjects(sessions),
+		cfg:           cfg,
+		summaries:     sums,
+		projectFilter: initFilter,
+	}
+	if initFilter != "" {
+		m.refilter()
+	}
+	return m
 }
 
 func collectProjects(sessions []session.Session) []string {

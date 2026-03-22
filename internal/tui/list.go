@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -46,6 +47,10 @@ func filterSessions(sessions []session.Session, query, projectFilter string, sum
 	for i, m := range matches {
 		indices[i] = candidates[m.Index]
 	}
+	// restore time order (most recent first)
+	sort.Slice(indices, func(i, j int) bool {
+		return sessions[indices[i]].ModTime.After(sessions[indices[j]].ModTime)
+	})
 	return indices
 }
 

@@ -69,7 +69,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	m := tui.New(sessions, version, cfg)
+	cwd, _ := os.Getwd()
+	m := tui.New(sessions, version, cfg, cwd)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	result, err := p.Run()
