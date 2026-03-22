@@ -14,6 +14,7 @@ func renderPreview(s *session.Session, sum *summary.Summary, width, height int) 
 	}
 
 	var b strings.Builder
+	used := 0
 
 	// line 1: title (prefer AI title)
 	title := s.Meta.Title
@@ -22,6 +23,7 @@ func renderPreview(s *session.Session, sum *summary.Summary, width, height int) 
 	}
 	b.WriteString(previewTitleStyle.Render(truncateDisplay(title, width-2)))
 	b.WriteString("\n")
+	used++
 
 	// line 2-3: metadata
 	info := fmt.Sprintf("%s  |  %s  |  %s",
@@ -31,6 +33,7 @@ func renderPreview(s *session.Session, sum *summary.Summary, width, height int) 
 	)
 	b.WriteString(info)
 	b.WriteString("\n")
+	used++
 
 	tokens := fmt.Sprintf("%s  |  %s",
 		previewLabelStyle.Render("Tokens: ")+previewValueStyle.Render(
@@ -41,8 +44,9 @@ func renderPreview(s *session.Session, sum *summary.Summary, width, height int) 
 	)
 	b.WriteString(tokens)
 	b.WriteString("\n")
+	used++
 
-	// line 4: extra token details + mode
+	// extra token details + mode
 	var extras []string
 	if mode := s.Settings.AutonomyMode; mode != "" {
 		extras = append(extras, previewLabelStyle.Render("Mode: ")+previewValueStyle.Render(mode))
@@ -55,24 +59,40 @@ func renderPreview(s *session.Session, sum *summary.Summary, width, height int) 
 		extras = append(extras, previewLabelStyle.Render("Cache: ")+previewValueStyle.Render(
 			fmt.Sprintf("%s read / %s created", formatTokens(u.CacheReadTokens), formatTokens(u.CacheCreationTokens))))
 	}
-	metaLines := 3
 	if len(extras) > 0 {
 		b.WriteString(strings.Join(extras, "  |  "))
 		b.WriteString("\n")
-		metaLines++
+		used++
+	}
+
+	// AI topics
+	if sum != nil && len(sum.Topics) > 0 {
+		maxTopics := min(len(sum.Topics), height-used-4) // reserve lines for separator + conversation
+		if maxTopics > 0 {
+			for _, t := range sum.Topics[:maxTopics] {
+				line := previewLabelStyle.Render("● ") + previewValueStyle.Render(truncateDisplay(t.Summary, width-10))
+				if len(t.Keywords) > 0 {
+					kw := dimStyle.Render("  " + strings.Join(t.Keywords, ", "))
+					line += kw
+				}
+				b.WriteString(line)
+				b.WriteString("\n")
+				used++
+			}
+		}
 	}
 
 	// separator
 	b.WriteString(dimStyle.Render(strings.Repeat("─", min(width-2, 60))))
 	b.WriteString("\n")
-	metaLines++ // separator
+	used++
 
 	// remaining lines for conversation
-	msgLines := height - metaLines
+	msgLines := height - used
 	if msgLines < 2 {
 		msgLines = 2
 	}
-	maxLen := width - 8 // leave room for "User: " prefix
+	maxLen := width - 8
 
 	// collect meaningful messages
 	type turnMsg struct {
@@ -99,26 +119,25 @@ func renderPreview(s *session.Session, sum *summary.Summary, width, height int) 
 		return b.String()
 	}
 
-	// decide how many from head/tail to show
-	showHead := msgLines / 2
-	showTail := msgLines - showHead - 1 // -1 for "..."
-	if showTail < 1 {
-		showTail = 1
-		showHead = msgLines - showTail - 1
-	}
-
 	if len(turns) <= msgLines {
-		// all fit, show everything
 		for _, t := range turns {
 			b.WriteString(formatTurn(t.role, t.text))
 			b.WriteString("\n")
 		}
 	} else {
-		for _, t := range turns[:showHead] {
-			b.WriteString(formatTurn(t.role, t.text))
-			b.WriteString("\n")
+		showHead := msgLines / 2
+		showTail := msgLines - showHead - 1 // -1 for "..." line
+		if showTail < 1 {
+			showTail = 1
+			showHead = msgLines - showTail - 1
 		}
-		b.WriteString(dimStyle.Render(fmt.Sprintf("  ... (%d more turns) ...", len(turns)-showHead-showTail)))
+		if showHead > 0 {
+			for _, t := range turns[:showHead] {
+				b.WriteString(formatTurn(t.role, t.text))
+				b.WriteString("\n")
+			}
+		}
+		b.WriteString(dimStyle.Render(fmt.Sprintf("  ... (%d more) ...", len(turns)-showHead-showTail)))
 		b.WriteString("\n")
 		for _, t := range turns[len(turns)-showTail:] {
 			b.WriteString(formatTurn(t.role, t.text))
@@ -134,23 +153,5 @@ func formatTurn(role, text string) string {
 		return userMsgStyle.Render("User: ") + previewValueStyle.Render(text)
 	}
 	return assistantMsgStyle.Render("Asst: ") + dimStyle.Render(text)
-}
-
-func lastAssistantReply(s *session.Session) string {
-	for i := len(s.Messages) - 1; i >= 0; i-- {
-		msg := s.Messages[i]
-		if msg.Role != "assistant" {
-			continue
-		}
-		text := extractText(msg.Content)
-		if text == "" {
-			continue
-		}
-		if len(text) > 150 {
-			text = text[:147] + "..."
-		}
-		return text
-	}
-	return ""
 }
 

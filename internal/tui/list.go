@@ -91,7 +91,7 @@ func renderListItem(s *session.Session, sum *summary.Summary, width int, selecte
 	if sum != nil && sum.Title != "" {
 		title = "[AI] " + sum.Title
 	} else if sum != nil && sum.Title == "" {
-		title = truncateDisplay(title, 36) + " " + dimStyle.Render("(empty)")
+		title = truncateDisplay(title, 36) + " " + dimStyle.Render("(skipped)")
 	}
 	title = truncateDisplay(title, 50)
 

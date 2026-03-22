@@ -528,11 +528,12 @@ func (m *Model) View() string {
 	b.WriteString("\n")
 
 	// calculate layout (header=2 lines + separator + status bar + separator + bottom = 7 overhead)
-	listHeight := (m.height - 7) * 2 / 3
+	available := m.height - 7
+	listHeight := available / 2
 	if listHeight < 3 {
 		listHeight = 3
 	}
-	previewHeight := m.height - listHeight - 7
+	previewHeight := available - listHeight
 
 	// list
 	start := 0
