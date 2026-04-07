@@ -2,7 +2,7 @@
 
 <img src="icon.svg" width="80" align="right" alt="Droid Toolkits">
 
-Interactive TUI for browsing, searching, and managing [Droid](https://docs.factory.ai) chat sessions.
+Interactive TUI and CLI for browsing, searching, managing, and inspecting [Droid](https://docs.factory.ai) chat sessions.
 
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) + [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
@@ -13,6 +13,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) + [Lip Gloss
 - **Fuzzy search** across session titles, project names, user messages, and AI-generated summaries
 - **Project auto-filter** — automatically scopes to sessions from the current directory
 - **AI-powered indexing** — generates summaries and keywords for each session via any OpenAI-compatible LLM
+- **Context Health Inspector** — analyzes representative sessions for prompt bloat, tool overhead, and cache efficiency
 - **Preview panel** — metadata, AI topics, and head/tail conversation turns
 - **Session management** — resume, rename, delete, batch delete
 - **Cross-process safe** — file-level locking prevents duplicate indexing
@@ -35,7 +36,8 @@ go build -o mantis .
 
 ```bash
 mantis                  # Launch TUI (auto-filters to current project)
-mantis config           # Configure LLM for smart search
+mantis inspect          # Analyze representative sessions for context optimization
+mantis config           # Configure LLM for smart search and inspect
 mantis index            # Generate AI summaries for all sessions
 mantis index --retry    # Re-index only sessions with empty summaries
 mantis index --force    # Regenerate all summaries from scratch
@@ -62,7 +64,7 @@ mantis help             # Show help
 
 ## Smart Search
 
-Configure an LLM to auto-generate summaries and keywords for each session:
+Configure an LLM to enable both smart search and inspect analysis:
 
 ```bash
 mantis config
@@ -79,6 +81,23 @@ Once configured, mantis indexes sessions in the background on startup. The statu
 
 Summaries are cached in `~/.mantis/summaries/` and only generated once per session. Multiple mantis instances can run concurrently without duplicate indexing.
 
+## Context Health Inspector
+
+Run:
+
+```bash
+mantis inspect
+```
+
+`mantis inspect` scans local sessions, selects a few representative long-running sessions, and reports:
+
+- context distribution across `system_prompt`, `system_reminder`, `thinking`, `tool_use`, `tool_result`, and user/assistant text
+- tool hotspots by call count and returned content size
+- token usage and cache hit rate
+- an LLM-generated diagnosis with optimization suggestions
+
+Reports are saved locally for later review.
+
 ## Data
 
 | Path | Content |
@@ -86,6 +105,7 @@ Summaries are cached in `~/.mantis/summaries/` and only generated once per sessi
 | `~/.factory/sessions/` | Session files (`.jsonl` + `.settings.json`) |
 | `~/.mantis/config.yaml` | LLM configuration |
 | `~/.mantis/summaries/` | Cached AI summaries |
+| `~/.mantis/reports/` | Saved inspect reports |
 
 ## License
 

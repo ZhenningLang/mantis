@@ -146,6 +146,31 @@ func parseJSONL(path string) (SessionMeta, []Message, error) {
 	return meta, messages, nil
 }
 
+// ParseAllEvents reads a JSONL session file and returns all events with full fidelity.
+func ParseAllEvents(path string) ([]RawEvent, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 2*1024*1024), 2*1024*1024)
+
+	var events []RawEvent
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var ev RawEvent
+		if json.Unmarshal(line, &ev) == nil {
+			events = append(events, ev)
+		}
+	}
+	return events, scanner.Err()
+}
+
 func dirToProject(dirName string) string {
 	p := dirToPath(dirName)
 	if p != "" {

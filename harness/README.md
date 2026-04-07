@@ -1,8 +1,8 @@
 # Development Harness (For AI Coding Agent)
 
-mantis 是一个终端 TUI 应用，用于浏览、搜索和管理 [Droid](https://docs.factory.ai) 的聊天 session。
+mantis 是一个终端 TUI + CLI 工具，用于浏览、搜索、管理和分析 [Droid](https://docs.factory.ai) 的聊天 session。
 
-用户可以在终端中快速查找历史 session、预览对话内容、恢复 / 删除 / 重命名 session。
+用户可以在终端中快速查找历史 session、预览对话内容、恢复 / 删除 / 重命名 session，也可以对代表性 session 做上下文健康度分析。
 
 ## 技术栈
 
@@ -17,6 +17,7 @@ mantis 是一个终端 TUI 应用，用于浏览、搜索和管理 [Droid](https
 - Sessions: `~/.factory/sessions/` — `.jsonl` + `.settings.json`
 - 配置: `~/.mantis/config.yaml` — LLM 配置（可选）
 - 摘要缓存: `~/.mantis/summaries/` — LLM 生成的 session 摘要
+- 分析报告: `~/.mantis/reports/` — `mantis inspect` 输出的报告
 
 ## 核心功能
 
@@ -31,6 +32,15 @@ mantis 是一个终端 TUI 应用，用于浏览、搜索和管理 [Droid](https
 | 统计面板 | Ctrl+S | 按项目分组统计 |
 | 路径切换 | Tab | 在项目短名和完整路径间切换 |
 
+## Context Health Inspector
+
+配置 LLM 后（`mantis config`），可以执行 `mantis inspect`：
+- 自动挑选若干较长、非 subagent 的代表性 session
+- 静态统计 `system_prompt`、`system_reminder`、`thinking`、`tool_use`、`tool_result` 等上下文占比
+- 汇总工具调用次数、结果体积、token usage、cache hit rate
+- 调用同一套 OpenAI-compatible LLM 生成中文诊断和优化建议
+- 终端打印报告，同时保存到 `~/.mantis/reports/`
+
 ## Smart Search
 
 配置 LLM 后（`mantis config`），启动时后台异步为未索引的 session 生成摘要：
@@ -43,8 +53,11 @@ mantis 是一个终端 TUI 应用，用于浏览、搜索和管理 [Droid](https
 
 ```bash
 mantis              # 启动 TUI
-mantis config       # 配置 LLM（交互式）
+mantis inspect      # 分析 session 的上下文开销与优化点
+mantis config       # 配置 LLM（交互式，供 smart search / inspect 复用）
+mantis index        # 生成 session 摘要（支持 --force / --retry）
 mantis status       # 查看摘要索引状态和统计信息
+mantis clean        # 删除所有空 session（没有 user message）
 mantis version      # 打印版本
 ```
 

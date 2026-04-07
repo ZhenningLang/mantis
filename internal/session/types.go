@@ -66,3 +66,30 @@ func (s *Session) TotalTokens() int {
 func (s *Session) ActiveDuration() time.Duration {
 	return time.Duration(s.Settings.AssistantActiveTimeMs) * time.Millisecond
 }
+
+// RawEvent represents a single line from a session JSONL file with full fidelity.
+type RawEvent struct {
+	Type    string          `json:"type"`
+	Message *RawMessage     `json:"message,omitempty"`
+	ID      string          `json:"id,omitempty"`
+	Title   string          `json:"title,omitempty"`
+	CWD     string          `json:"cwd,omitempty"`
+	CallingSessionID string `json:"callingSessionId,omitempty"`
+}
+
+type RawMessage struct {
+	Role    string           `json:"role"`
+	Content []RawContentItem `json:"content"`
+}
+
+type RawContentItem struct {
+	Type      string `json:"type"`
+	Text      string `json:"text,omitempty"`
+	Content   string `json:"content,omitempty"` // tool_result content
+	ID        string `json:"id,omitempty"`      // tool_use id
+	Name      string `json:"name,omitempty"`    // tool_use name
+	ToolUseID string `json:"tool_use_id,omitempty"`
+	Input     any    `json:"input,omitempty"`
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
+}

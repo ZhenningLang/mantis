@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/zhenninglang/mantis/internal/action"
 	"github.com/zhenninglang/mantis/internal/config"
+	"github.com/zhenninglang/mantis/internal/inspect"
 	"github.com/zhenninglang/mantis/internal/session"
 	"github.com/zhenninglang/mantis/internal/status"
 	"github.com/zhenninglang/mantis/internal/summary"
@@ -46,6 +47,17 @@ func main() {
 			return
 		case "clean":
 			if err := runClean(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "inspect":
+			cfg := config.Load()
+			if !cfg.HasLLM() {
+				fmt.Fprintln(os.Stderr, "LLM not configured. Run `mantis config` first.")
+				os.Exit(1)
+			}
+			if err := inspect.Run(cfg); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -102,8 +114,9 @@ func printHelp() {
 Usage: mantis [command]
 
 Commands:
-  (none)     Launch interactive TUI
-  config     Configure LLM for smart search
+  (none)     Launch interactive TUI (session viewer)
+  inspect    Context Health Inspector — analyze sessions for optimization
+  config     Configure LLM for smart search and inspect
   index      Generate AI summaries for all sessions (--force to regenerate all, --retry to redo empty ones)
   status     Show indexing status and statistics
   clean      Remove all empty sessions (no user messages)

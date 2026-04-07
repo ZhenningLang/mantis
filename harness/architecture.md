@@ -3,13 +3,20 @@
 ## 项目结构
 
 ```
-main.go                       — 入口：CLI 分发 + 加载 session → 启动 TUI → 退出后 exec droid -r
+main.go                       — 入口：CLI 分发（TUI / inspect / config / index / status / clean）
 internal/
   config/
     config.go                 — 配置加载/保存/交互式引导（~/.mantis/config.yaml）
   session/
-    types.go                  — 数据模型（Session, SessionMeta, Settings, TokenUsage, Message）
-    loader.go                 — 从 ~/.factory/sessions/ 加载所有 session
+    types.go                  — 数据模型（Session, SessionMeta, Settings, TokenUsage, Message, RawEvent）
+    loader.go                 — 从 ~/.factory/sessions/ 加载 session / 解析原始事件
+  inspect/
+    types.go                  — inspect 结构化分析结果模型
+    select.go                 — 挑选代表性 session
+    static.go                 — 静态分析上下文分布 / 工具体积 / cache / prompt 片段
+    agent.go                  — 调用 LLM 生成中文诊断
+    report.go                 — 终端报告渲染
+    run.go                    — inspect 主流程 + 报告保存
   summary/
     summary.go                — 摘要数据类型 + 读写（~/.mantis/summaries/）
     llm.go                    — OpenAI-compatible API 调用
@@ -88,6 +95,21 @@ main.go
     → 初始化 filtered = [0, 1, 2, ..., n-1]
 ```
 
+### inspect 分析
+
+```
+main.go
+  → config.Load()
+  → inspect.Run(cfg)
+    → session.LoadAll()
+    → inspect.SelectSessions(all, 3)
+    → inspect.Analyze(session)              // 读取 raw events 做静态分析
+      → session.ParseAllEvents(path)
+    → inspect.RunAgentAnalysis(cfg.LLM)     // LLM 生成诊断
+    → inspect.PrintReport()
+    → 保存到 ~/.mantis/reports/inspect-*.txt
+```
+
 ### 搜索过滤
 
 ```
@@ -125,6 +147,16 @@ type Session struct {
 }
 ```
 
+### RawEvent（inspect 使用）
+
+`inspect` 不只依赖预览用的 `Message`，还会读取完整 `.jsonl` 原始事件流：
+
+- `RawEvent`：保留 message / tool_result / metadata / callingSessionID
+- `RawMessage`：role + 完整 content items
+- `RawContentItem`：支持 `text` / `thinking` / `tool_use` / `tool_result`
+
+这层数据使得 inspect 可以精确统计工具返回体积、thinking 开销、system reminder 注入和 subagent session。
+
 ### 项目名解析
 
 优先级：session 元数据 cwd > 文件系统探测 > naive 替换
@@ -138,9 +170,13 @@ type Session struct {
 
 ```
 main.go
-  ├── internal/session   (数据加载，无外部状态依赖)
+  ├── internal/config    (配置)
+  ├── internal/session   (数据加载 / raw event 解析)
+  ├── internal/inspect   (静态分析 + LLM 诊断 + 报告)
+  ├── internal/summary   (摘要索引)
+  ├── internal/status    (CLI 状态输出)
   └── internal/tui       (UI 层)
         └── internal/action  (操作逻辑，直接操作文件系统)
 ```
 
-各包职责清晰，session 只负责读取，action 只负责写入，tui 负责交互。
+各包职责清晰：session 负责读取，inspect 负责分析，summary 负责索引，action 负责写入，tui 负责交互。
