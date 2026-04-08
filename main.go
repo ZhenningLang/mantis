@@ -20,6 +20,30 @@ import (
 
 var version = "dev"
 
+var resolveForkSessionID = func(prefix string) (string, error) {
+	sessions, err := session.LoadAll()
+	if err != nil {
+		return "", fmt.Errorf("load sessions: %w", err)
+	}
+	source, err := compress.ResolveSourceByPrefix(sessions, prefix)
+	if err != nil {
+		return "", err
+	}
+	return source.Meta.ID, nil
+}
+
+var forkSession = func(id string) error {
+	droid, err := exec.LookPath("droid")
+	if err != nil {
+		return fmt.Errorf("droid not found: %w", err)
+	}
+	cmd := exec.Command(droid, "--fork", id)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -66,6 +90,12 @@ func main() {
 			return
 		case "compress":
 			if err := runCompress(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "fork":
+			if err := runFork(os.Args[2:]); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -122,6 +152,7 @@ Commands:
   (none)     Launch interactive TUI (session viewer)
   inspect    Context Health Inspector — analyze sessions for optimization
   compress   Compress a session into a fresh handoff session and resume it
+  fork       Fork a session by ID prefix and resume the fork
   completion Print shell completion script for bash/zsh/fish
   config     Configure LLM for smart search and inspect
   index      Generate AI summaries for all sessions (--force to regenerate all, --retry to redo empty ones)
@@ -251,6 +282,18 @@ func runCompress(args []string) error {
 		return fmt.Errorf("compressed session %s created, but resume failed: %w", id, err)
 	}
 	return nil
+}
+
+func runFork(args []string) error {
+	if len(args) != 1 || args[0] == "" {
+		return fmt.Errorf("usage: mantis fork <session-id-prefix>")
+	}
+	id, err := resolveForkSessionID(args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("[fork] Forking session %s...\n", id)
+	return forkSession(id)
 }
 
 func runCompletion(args []string) error {

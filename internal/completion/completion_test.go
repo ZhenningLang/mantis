@@ -14,7 +14,7 @@ func TestGenerateIncludesInspectAndCompressForAllShells(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Generate(%q) error = %v", shell, err)
 			}
-			for _, command := range []string{"inspect", "compress"} {
+			for _, command := range []string{"inspect", "compress", "fork"} {
 				if !strings.Contains(script, command) {
 					t.Fatalf("Generate(%q) missing command %q in script: %s", shell, command, script)
 				}

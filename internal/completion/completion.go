@@ -8,6 +8,7 @@ import (
 var commandNames = []string{
 	"inspect",
 	"compress",
+	"fork",
 	"config",
 	"index",
 	"status",
