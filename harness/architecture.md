@@ -3,10 +3,20 @@
 ## 项目结构
 
 ```
-main.go                       — 入口：CLI 分发（TUI / inspect / config / index / status / clean）
+ main.go                       — 入口：CLI 分发（TUI / inspect / compress / fork / completion / config / index / status / clean）
 internal/
+  completion/
+    completion.go            — 生成 bash / zsh / fish 子命令补全脚本
+  compress/
+    types.go                  — 压缩输入、handoff、Droid settings 类型
+    resolve.go                — session 前缀解析、Droid settings 解析、compress 主流程
+    extract.go                — 从 raw events 提取 anchors / task state / artifact trail
+    llm.go                    — 调用 source model 生成结构化 handoff JSON
+    session.go                — 渲染 handoff、新建 session 文件
   config/
     config.go                 — 配置加载/保存/交互式引导（~/.mantis/config.yaml）
+  llmstream/
+    stream.go                 — 默认流式 OpenAI-compatible SSE 客户端（chat/responses）
   session/
     types.go                  — 数据模型（Session, SessionMeta, Settings, TokenUsage, Message, RawEvent）
     loader.go                 — 从 ~/.factory/sessions/ 加载 session / 解析原始事件
@@ -19,7 +29,7 @@ internal/
     run.go                    — inspect 主流程 + 报告保存
   summary/
     summary.go                — 摘要数据类型 + 读写（~/.mantis/summaries/）
-    llm.go                    — OpenAI-compatible API 调用
+    llm.go                    — 通过默认流式 Chat Completions 生成摘要
     manager.go                — 批量生成 + 进度管理
   action/
     action.go                 — 操作逻辑（Delete, Rename）
@@ -106,9 +116,52 @@ main.go
     → inspect.Analyze(session)              // 读取 raw events 做静态分析
       → session.ParseAllEvents(path)
     → inspect.RunAgentAnalysis(cfg.LLM)     // LLM 生成诊断
+      → llmstream.ChatCompletions()         // 默认消费 SSE delta，而不是等待最终 JSON body
     → inspect.PrintReport()
     → 保存到 ~/.mantis/reports/inspect-*.txt
 ```
+
+### compress 压缩
+
+```
+main.go
+  → compress.Run(args)
+    → session.LoadAll()
+    → ResolveSourceByPrefix()
+    → session.ParseAllEvents(path)
+    → BuildCompressionInput()
+      → 找到最近一次 compressed handoff 作为 anchor
+      → 按 token budget 切分 summarized turns / preserved turns
+      → 提取 active skills / artifacts / todo / errors
+      → 把较老消息按 user-turn 聚合成 compacted history phases
+    → 读取 ~/.factory/settings.json 解析压缩 auth + model
+    → GenerateHandoff()
+      → 统一走默认流式 Chat Completions
+      → compress 每 5 秒打印一次 handoff 生成心跳，避免长时间静默
+      → 空输出/非法 JSON 直接失败
+    → CreateCompressedSession()
+      → 在最终 handoff 文本里追加 deterministic recent transcript（从 preserved turns 截取最近 visible turns，并过滤 Droid 内部 BYOK 错误提示）
+  → exec droid -r <new-id>
+```
+
+### fork 分叉
+
+```
+main.go
+  → runFork(args)
+    → session.LoadAll()
+    → compress.ResolveSourceByPrefix()
+    → exec droid --fork <full-id>
+```
+
+### LLM 流式调用
+
+`internal/llmstream` 统一处理 OpenAI-compatible SSE：
+
+- 请求体默认注入 `stream: true`
+- `chat/completions` 聚合 `choices[].delta.content`
+- `responses` 聚合 `response.output_text.delta` / `response.output_text.done`
+- 兼容本地 CLI Proxy 这类“流式有文本、非流式最终 JSON 为空”的 endpoint
 
 ### 搜索过滤
 

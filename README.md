@@ -14,6 +14,8 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) + [Lip Gloss
 - **Project auto-filter** — automatically scopes to sessions from the current directory
 - **AI-powered indexing** — generates summaries and keywords for each session via any OpenAI-compatible LLM
 - **Context Health Inspector** — analyzes representative sessions for prompt bloat, tool overhead, and cache efficiency
+- **Session compression handoff** — condenses a long session into a structured resume-ready handoff, appends a deterministic recent transcript tail, and jumps into the fresh session
+- **Session fork by prefix** — resolves a session ID prefix and delegates to `droid --fork`
 - **Preview panel** — metadata, AI topics, and head/tail conversation turns
 - **Session management** — resume, rename, delete, batch delete
 - **Cross-process safe** — file-level locking prevents duplicate indexing
@@ -37,6 +39,9 @@ go build -o mantis .
 ```bash
 mantis                  # Launch TUI (auto-filters to current project)
 mantis inspect          # Analyze representative sessions for context optimization
+mantis compress <id>    # Create a structured compressed handoff session, then droid -r into it
+mantis fork <id>        # Resolve a session ID prefix and droid --fork it
+mantis completion zsh   # Print shell completion script
 mantis config           # Configure LLM for smart search and inspect
 mantis index            # Generate AI summaries for all sessions
 mantis index --retry    # Re-index only sessions with empty summaries
@@ -96,7 +101,41 @@ mantis inspect
 - token usage and cache hit rate
 - an LLM-generated diagnosis with optimization suggestions
 
+LLM-backed features now default to streaming OpenAI-compatible requests, which keeps `inspect`, `index`, and `compress` compatible with local CLI proxy endpoints that emit text through SSE deltas instead of the final non-streaming JSON body.
+
 Reports are saved locally for later review.
+
+## Session Compression
+
+Run:
+
+```bash
+mantis compress <session-id-prefix>
+```
+
+`mantis compress` resolves the source session by ID prefix, prints stage-by-stage progress to the terminal, then runs an anchor-based compaction pass: it skips content before the latest prior compressed handoff, preserves a token-budgeted recent window verbatim for the LLM, keeps active skill names, groups older turns into compacted history phases, filters Droid-internal `BYOK Error:` noise out of the preserved transcript, appends a deterministic recent transcript tail built from the latest visible turns with its own cap, calls the streaming Chat Completions API through the shared SSE client, emits periodic "still generating" heartbeat logs while the LLM handoff is in flight, writes a fresh session beside the original files, and immediately resumes it with `droid -r`. If the compression API returns empty or invalid output, the command still fails fast instead of silently degrading to a fallback handoff.
+
+## Session Fork
+
+Run:
+
+```bash
+mantis fork <session-id-prefix>
+```
+
+`mantis fork` resolves the prefix to a unique local session ID and then shells out to `droid --fork <full-id>` so you can branch from an earlier conversation without looking up the full UUID manually.
+
+## Shell Completion
+
+Run one of:
+
+```bash
+mantis completion bash
+mantis completion zsh
+mantis completion fish
+```
+
+The generated script includes `inspect`, `compress`, and `fork` in the command completion list.
 
 ## Data
 
