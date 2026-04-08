@@ -13,9 +13,9 @@ var todoLinePattern = regexp.MustCompile(`^\d+\.\s+\[(completed|in_progress|pend
 var exitCodePattern = regexp.MustCompile(`\[Process exited with code (\d+)\]`)
 
 const (
-	compactionSummarySoftCapTokens = 2000
-	compactionSummaryReserveTokens = 6000
-	maxSummaryTurnTextLength       = 240
+	compactionSummarySoftCapTokens = 4000
+	compactionSummaryReserveTokens = 12000
+	maxSummaryTurnTextLength       = 600
 )
 
 type toolUseRecord struct {

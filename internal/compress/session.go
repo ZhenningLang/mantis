@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	recentTranscriptMaxTurns         = 10
-	recentTranscriptSoftCapTokens    = 3000
-	recentTranscriptMaxTurnTextRunes = 800
+	recentTranscriptMaxTurns         = 20
+	recentTranscriptSoftCapTokens    = 6000
+	recentTranscriptMaxTurnTextRunes = 1600
 )
 
 func CreateCompressedSession(source session.Session, handoff LLMHandoff) (string, error) {

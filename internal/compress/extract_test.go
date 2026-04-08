@@ -211,8 +211,8 @@ func TestBuildCompressionInputUsesCompactionAnchorAndSkillState(t *testing.T) {
 	if len(input.Compaction.ActiveSkills) != 1 || input.Compaction.ActiveSkills[0] != "se-tdd" {
 		t.Fatalf("ActiveSkills = %#v", input.Compaction.ActiveSkills)
 	}
-	if len(input.RecentWindow) != 2 {
-		t.Fatalf("RecentWindow len = %d, want 2", len(input.RecentWindow))
+	if len(input.RecentWindow) < 2 {
+		t.Fatalf("RecentWindow len = %d, want >= 2", len(input.RecentWindow))
 	}
 	if input.Compaction.RemovedCount == 0 || len(input.Compaction.SummarizedTurns) == 0 {
 		t.Fatalf("Compaction = %#v", input.Compaction)
