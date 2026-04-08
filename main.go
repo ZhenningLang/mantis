@@ -8,6 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/zhenninglang/mantis/internal/action"
+	"github.com/zhenninglang/mantis/internal/completion"
+	"github.com/zhenninglang/mantis/internal/compress"
 	"github.com/zhenninglang/mantis/internal/config"
 	"github.com/zhenninglang/mantis/internal/inspect"
 	"github.com/zhenninglang/mantis/internal/session"
@@ -62,6 +64,18 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "compress":
+			if err := runCompress(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "completion":
+			if err := runCompletion(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown command: %s\nRun `mantis help` for usage.\n", os.Args[1])
 			os.Exit(1)
@@ -93,16 +107,7 @@ func main() {
 
 	model := result.(*tui.Model)
 	if id := model.ResumeID(); id != "" {
-		droid, err := exec.LookPath("droid")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "droid not found: %v\n", err)
-			os.Exit(1)
-		}
-		cmd := exec.Command(droid, "-r", id)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		if err := resumeSession(id); err != nil {
 			os.Exit(1)
 		}
 	}
@@ -116,6 +121,8 @@ Usage: mantis [command]
 Commands:
   (none)     Launch interactive TUI (session viewer)
   inspect    Context Health Inspector — analyze sessions for optimization
+  compress   Compress a session into a fresh handoff session and resume it
+  completion Print shell completion script for bash/zsh/fish
   config     Configure LLM for smart search and inspect
   index      Generate AI summaries for all sessions (--force to regenerate all, --retry to redo empty ones)
   status     Show indexing status and statistics
@@ -232,4 +239,40 @@ func runClean() error {
 	}
 	fmt.Printf("Deleted %d empty sessions.\n", deleted)
 	return nil
+}
+
+func runCompress(args []string) error {
+	id, err := compress.Run(args)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("[compress] Resuming new session %s...\n", id)
+	if err := resumeSession(id); err != nil {
+		return fmt.Errorf("compressed session %s created, but resume failed: %w", id, err)
+	}
+	return nil
+}
+
+func runCompletion(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: mantis completion <bash|zsh|fish>")
+	}
+	script, err := completion.Generate(args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Print(script)
+	return nil
+}
+
+func resumeSession(id string) error {
+	droid, err := exec.LookPath("droid")
+	if err != nil {
+		return fmt.Errorf("droid not found: %w", err)
+	}
+	cmd := exec.Command(droid, "-r", id)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
