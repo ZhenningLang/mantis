@@ -1,16 +1,14 @@
 package summary
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/zhenninglang/mantis/internal/config"
+	"github.com/zhenninglang/mantis/internal/llmstream"
 )
 
 type chatMessage struct {
@@ -78,39 +76,14 @@ func Generate(ctx context.Context, cfg config.LLMConfig, userMessages []string) 
 		return nil, err
 	}
 
-	baseURL := strings.TrimRight(cfg.BaseURL, "/")
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(body))
+	content, err := llmstream.ChatCompletions(ctx, llmstream.Auth{
+		BaseURL: cfg.BaseURL,
+		APIKey:  cfg.APIKey,
+	}, body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("llm request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("llm api error %d: %s", resp.StatusCode, truncate(string(respBody), 200))
-	}
-
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in response")
-	}
-
-	content := chatResp.Choices[0].Message.Content
 	content = strings.TrimSpace(content)
 	// strip markdown fences if present
 	content = strings.TrimPrefix(content, "```json")

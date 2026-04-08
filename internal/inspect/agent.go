@@ -1,16 +1,13 @@
 package inspect
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/zhenninglang/mantis/internal/config"
+	"github.com/zhenninglang/mantis/internal/llmstream"
 )
 
 const agentSystemPrompt = `你是一个 Droid (Factory AI CLI) session 健康度分析师。
@@ -79,39 +76,15 @@ func RunAgentAnalysis(ctx context.Context, cfg config.LLMConfig, analyses []Sess
 		return "", err
 	}
 
-	baseURL := strings.TrimRight(cfg.BaseURL, "/")
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(body))
+	content, err := llmstream.ChatCompletions(ctx, llmstream.Auth{
+		BaseURL: cfg.BaseURL,
+		APIKey:  cfg.APIKey,
+	}, body)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: 180 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("LLM request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("LLM API error %d: %s", resp.StatusCode, truncateStr(string(respBody), 300))
-	}
-
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return "", fmt.Errorf("parse response: %w", err)
-	}
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no choices in LLM response")
-	}
-
-	return strings.TrimSpace(chatResp.Choices[0].Message.Content), nil
+	return strings.TrimSpace(content), nil
 }
 
 func buildAnalysisPrompt(analyses []SessionAnalysis) string {
